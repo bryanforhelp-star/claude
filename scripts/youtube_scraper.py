@@ -1,551 +1,372 @@
 #!/usr/bin/env python3
 """
-YouTube Niche Scraper — Uses YouTube Data API v3 to pull real channel
-and video data for competitor analysis and niche opportunity scoring.
+YouTube Niche Scraper — Uses YouTube Data API v3 via direct HTTP requests.
+Bypasses SSL issues in restricted environments.
 
 Usage:
-    # Search for channels in a niche
     python3 scripts/youtube_scraper.py search "court case documentary"
-
-    # Analyze a specific channel by handle or ID
     python3 scripts/youtube_scraper.py channel @fern-tv
-    python3 scripts/youtube_scraper.py channel UCODHrzPMGbNv67e84WDZhQQ
-
-    # Compare multiple niches (searches each, compares stats)
-    python3 scripts/youtube_scraper.py compare "betrayal revenge story" "court case documentary" "AI tools tutorial" "english learning"
-
-    # Export channel video data for Step 1 analysis
+    python3 scripts/youtube_scraper.py compare "betrayal revenge" "court drama" "AI tools" "english learning"
     python3 scripts/youtube_scraper.py videos @fern-tv --limit 50
-
-Setup:
-    1. Go to https://console.cloud.google.com/
-    2. Create a project (or select existing)
-    3. Enable "YouTube Data API v3"
-    4. Create an API key (APIs & Services > Credentials > Create Credentials > API Key)
-    5. Set the key: export YOUTUBE_API_KEY="your-key-here"
-
-Quota: 10,000 units/day free. Each search = 100 units, each channel = 5 units,
-each video list = 3 units. This script is designed to stay well within limits.
 """
 
 import argparse
 import csv
 import json
 import os
+import re
+import ssl
 import sys
-from datetime import datetime, timedelta, timezone
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+import urllib.request
+import urllib.parse
+import urllib.error
+from datetime import datetime
+
+
+API_BASE = "https://www.googleapis.com/youtube/v3"
 
 
 def get_api_key():
     key = os.environ.get("YOUTUBE_API_KEY")
     if not key:
-        print("ERROR: YOUTUBE_API_KEY environment variable not set.")
-        print()
-        print("Setup instructions:")
-        print("  1. Go to https://console.cloud.google.com/")
-        print("  2. Create a project (or select existing)")
-        print("  3. Enable 'YouTube Data API v3'")
-        print("  4. Create an API key (APIs & Services > Credentials)")
-        print("  5. Run: export YOUTUBE_API_KEY='your-key-here'")
+        print("ERROR: Set YOUTUBE_API_KEY environment variable.")
+        print("  export YOUTUBE_API_KEY='your-key-here'")
         sys.exit(1)
     return key
 
 
-def build_youtube(api_key):
-    return build("youtube", "v3", developerKey=api_key)
+# Create SSL context that skips verification (for sandboxed environments)
+SSL_CTX = ssl.create_default_context()
+SSL_CTX.check_hostname = False
+SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
-def format_number(n):
-    """Format large numbers for display."""
-    if n is None:
-        return "N/A"
+def api_get(endpoint, params):
+    """Make a GET request to the YouTube API."""
+    params["key"] = get_api_key()
+    url = f"{API_BASE}/{endpoint}?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, context=SSL_CTX, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"API Error {e.code}: {body[:500]}")
+        sys.exit(1)
+
+
+def fmt(n):
+    """Format large numbers."""
+    if n is None: return "N/A"
     n = int(n)
-    if n >= 1_000_000_000:
-        return f"{n / 1_000_000_000:.1f}B"
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n / 1_000:.1f}K"
+    if n >= 1_000_000_000: return f"{n/1e9:.1f}B"
+    if n >= 1_000_000: return f"{n/1e6:.1f}M"
+    if n >= 1_000: return f"{n/1e3:.1f}K"
     return str(n)
 
 
-def parse_duration(duration_str):
+def parse_duration(d):
     """Parse ISO 8601 duration to seconds."""
-    import re
-    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_str)
-    if not match:
-        return 0
-    hours = int(match.group(1) or 0)
-    minutes = int(match.group(2) or 0)
-    seconds = int(match.group(3) or 0)
-    return hours * 3600 + minutes * 60 + seconds
+    m = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', d or '')
+    if not m: return 0
+    return int(m.group(1) or 0)*3600 + int(m.group(2) or 0)*60 + int(m.group(3) or 0)
 
 
-def get_channel_id_from_handle(youtube, handle):
-    """Resolve a @handle to a channel ID."""
+def resolve_handle(handle):
+    """Resolve @handle to channel ID."""
     handle = handle.lstrip("@")
-    try:
-        resp = youtube.channels().list(
-            part="id",
-            forHandle=handle
-        ).execute()
-        if resp.get("items"):
-            return resp["items"][0]["id"]
-    except HttpError:
-        pass
-
-    # Fallback: search for the handle
-    resp = youtube.search().list(
-        part="snippet",
-        q=handle,
-        type="channel",
-        maxResults=1
-    ).execute()
-    if resp.get("items"):
-        return resp["items"][0]["snippet"]["channelId"]
+    # Try forHandle first
+    data = api_get("channels", {"part": "id", "forHandle": handle})
+    if data.get("items"):
+        return data["items"][0]["id"]
+    # Fallback to search
+    data = api_get("search", {"part": "snippet", "q": handle, "type": "channel", "maxResults": 1})
+    if data.get("items"):
+        return data["items"][0]["snippet"]["channelId"]
     return None
 
 
-def get_channel_stats(youtube, channel_id):
-    """Get detailed channel statistics."""
-    resp = youtube.channels().list(
-        part="snippet,statistics,contentDetails,brandingSettings",
-        id=channel_id
-    ).execute()
-    if not resp.get("items"):
-        return None
-    return resp["items"][0]
+def get_channel(channel_id):
+    """Get channel details."""
+    data = api_get("channels", {"part": "snippet,statistics,contentDetails", "id": channel_id})
+    return data["items"][0] if data.get("items") else None
 
 
-def get_channel_videos(youtube, channel_id, limit=50):
-    """Get recent videos from a channel with their stats."""
-    # Get uploads playlist
-    channel = youtube.channels().list(
-        part="contentDetails",
-        id=channel_id
-    ).execute()
+def get_videos(channel_id, limit=50):
+    """Get recent videos with stats."""
+    ch = api_get("channels", {"part": "contentDetails", "id": channel_id})
+    if not ch.get("items"): return []
+    uploads = ch["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-    if not channel.get("items"):
-        return []
-
-    uploads_id = channel["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-
-    # Get video IDs from uploads playlist
     video_ids = []
-    next_page = None
+    page = None
     while len(video_ids) < limit:
-        batch_size = min(50, limit - len(video_ids))
-        resp = youtube.playlistItems().list(
-            part="contentDetails",
-            playlistId=uploads_id,
-            maxResults=batch_size,
-            pageToken=next_page
-        ).execute()
-
-        for item in resp.get("items", []):
+        params = {"part": "contentDetails", "playlistId": uploads, "maxResults": min(50, limit - len(video_ids))}
+        if page: params["pageToken"] = page
+        data = api_get("playlistItems", params)
+        for item in data.get("items", []):
             video_ids.append(item["contentDetails"]["videoId"])
+        page = data.get("nextPageToken")
+        if not page: break
 
-        next_page = resp.get("nextPageToken")
-        if not next_page:
-            break
-
-    # Get video details in batches of 50
     videos = []
     for i in range(0, len(video_ids), 50):
         batch = video_ids[i:i+50]
-        resp = youtube.videos().list(
-            part="snippet,statistics,contentDetails",
-            id=",".join(batch)
-        ).execute()
-        videos.extend(resp.get("items", []))
-
+        data = api_get("videos", {"part": "snippet,statistics,contentDetails", "id": ",".join(batch)})
+        videos.extend(data.get("items", []))
     return videos
 
 
-def search_channels(youtube, query, max_results=15):
-    """Search for channels matching a query."""
-    resp = youtube.search().list(
-        part="snippet",
-        q=query,
-        type="channel",
-        maxResults=max_results,
-        order="relevance"
-    ).execute()
-
-    channel_ids = [item["snippet"]["channelId"] for item in resp.get("items", [])]
-
-    if not channel_ids:
-        return []
-
-    # Get full stats for each channel
-    channels = []
-    resp = youtube.channels().list(
-        part="snippet,statistics",
-        id=",".join(channel_ids)
-    ).execute()
-
-    for item in resp.get("items", []):
-        channels.append(item)
-
-    return channels
+def search_channels(query, max_results=15):
+    """Search for channels."""
+    data = api_get("search", {"part": "snippet", "q": query, "type": "channel", "maxResults": max_results, "order": "relevance"})
+    ids = [item["snippet"]["channelId"] for item in data.get("items", [])]
+    if not ids: return []
+    data = api_get("channels", {"part": "snippet,statistics", "id": ",".join(ids)})
+    return data.get("items", [])
 
 
-def analyze_channel(youtube, channel_identifier):
-    """Full channel analysis with video-level data."""
-    # Resolve handle to ID if needed
-    if channel_identifier.startswith("@") or not channel_identifier.startswith("UC"):
-        channel_id = get_channel_id_from_handle(youtube, channel_identifier)
-        if not channel_id:
-            print(f"ERROR: Could not find channel: {channel_identifier}")
+# ─── COMMANDS ───────────────────────────────────────────────────────
+
+def cmd_search(args):
+    channels = search_channels(args.query, args.limit)
+    channels.sort(key=lambda c: int(c.get("statistics", {}).get("subscriberCount", 0)), reverse=True)
+
+    print(f"\nSearch: '{args.query}' — {len(channels)} channels found")
+    print(f"{'Channel':<45} {'Subs':>10} {'Views':>12} {'Videos':>7}")
+    print("-" * 78)
+    for ch in channels:
+        s = ch.get("statistics", {})
+        print(f"{ch['snippet']['title'][:44]:<45} {fmt(s.get('subscriberCount')):>10} {fmt(s.get('viewCount')):>12} {s.get('videoCount','?'):>7}")
+
+
+def cmd_channel(args):
+    cid = args.channel
+    if cid.startswith("@") or not cid.startswith("UC"):
+        cid = resolve_handle(cid)
+        if not cid:
+            print(f"ERROR: Channel not found: {args.channel}")
             return
-    else:
-        channel_id = channel_identifier
 
-    # Get channel stats
-    channel = get_channel_stats(youtube, channel_id)
-    if not channel:
-        print(f"ERROR: Could not fetch channel data for: {channel_id}")
+    ch = get_channel(cid)
+    if not ch:
+        print(f"ERROR: Could not fetch channel: {cid}")
         return
 
-    snippet = channel["snippet"]
-    stats = channel["statistics"]
-
-    print("=" * 70)
-    print(f"CHANNEL: {snippet['title']}")
-    print(f"Handle: @{snippet.get('customUrl', 'N/A')}")
-    print(f"Created: {snippet['publishedAt'][:10]}")
-    print(f"Description: {snippet.get('description', '')[:200]}...")
-    print("-" * 70)
-    print(f"Subscribers:  {format_number(stats.get('subscriberCount'))}")
-    print(f"Total Views:  {format_number(stats.get('viewCount'))}")
-    print(f"Total Videos: {stats.get('videoCount', 'N/A')}")
-
+    snip = ch["snippet"]
+    stats = ch["statistics"]
     total_views = int(stats.get("viewCount", 0))
-    total_videos = int(stats.get("videoCount", 0))
+    total_vids = int(stats.get("videoCount", 0))
     total_subs = int(stats.get("subscriberCount", 0))
 
-    if total_videos > 0:
-        print(f"Avg Views/Video: {format_number(total_views // total_videos)}")
-    if total_subs > 0:
-        print(f"Views/Sub Ratio: {total_views / total_subs:.1f}x")
-
-    # Get recent videos
-    print("\n" + "=" * 70)
-    print("RECENT VIDEOS (last 50)")
     print("=" * 70)
+    print(f"CHANNEL: {snip['title']}")
+    print(f"Created: {snip['publishedAt'][:10]}")
+    print(f"Description: {snip.get('description','')[:150]}...")
+    print("-" * 70)
+    print(f"Subscribers:    {fmt(total_subs)}")
+    print(f"Total Views:    {fmt(total_views)}")
+    print(f"Total Videos:   {total_vids}")
+    if total_vids > 0:
+        print(f"Avg Views/Vid:  {fmt(total_views // total_vids)}")
+    if total_subs > 0:
+        print(f"Views/Sub:      {total_views / total_subs:.1f}x")
 
-    videos = get_channel_videos(youtube, channel_id, limit=50)
-
+    # Videos
+    print(f"\n{'='*70}\nRECENT VIDEOS (up to 50)\n{'='*70}")
+    videos = get_videos(cid, limit=50)
     if not videos:
         print("No videos found.")
         return
 
-    # Analyze videos
-    video_data = []
+    vdata = []
     for v in videos:
-        vsnip = v["snippet"]
-        vstats = v.get("statistics", {})
-        duration = parse_duration(v["contentDetails"].get("duration", "PT0S"))
-
-        views = int(vstats.get("viewCount", 0))
-        likes = int(vstats.get("likeCount", 0))
-        comments = int(vstats.get("commentCount", 0))
-        published = vsnip["publishedAt"][:10]
-
-        video_data.append({
-            "title": vsnip["title"],
-            "views": views,
-            "likes": likes,
-            "comments": comments,
-            "duration_sec": duration,
-            "published": published,
+        vs = v.get("statistics", {})
+        vdata.append({
+            "title": v["snippet"]["title"],
+            "views": int(vs.get("viewCount", 0)),
+            "likes": int(vs.get("likeCount", 0)),
+            "comments": int(vs.get("commentCount", 0)),
+            "duration": parse_duration(v["contentDetails"].get("duration", "")),
+            "published": v["snippet"]["publishedAt"][:10],
             "id": v["id"]
         })
 
-    # Sort by views descending
-    video_data.sort(key=lambda x: x["views"], reverse=True)
+    vdata.sort(key=lambda x: x["views"], reverse=True)
+    view_list = [v["views"] for v in vdata]
+    avg_v = sum(view_list) // len(view_list)
+    med_v = sorted(view_list)[len(view_list)//2]
+    durs = [v["duration"] for v in vdata if v["duration"] > 0]
+    avg_dur = sum(durs) // len(durs) if durs else 0
 
-    # Calculate stats
-    view_counts = [v["views"] for v in video_data]
-    avg_views = sum(view_counts) // len(view_counts) if view_counts else 0
-    median_views = sorted(view_counts)[len(view_counts) // 2] if view_counts else 0
-    max_views = max(view_counts) if view_counts else 0
-    min_views = min(view_counts) if view_counts else 0
+    print(f"\nView Stats ({len(vdata)} videos):")
+    print(f"  Average:    {fmt(avg_v)}")
+    print(f"  Median:     {fmt(med_v)}")
+    print(f"  Max:        {fmt(max(view_list))}")
+    print(f"  Min:        {fmt(min(view_list))}")
+    print(f"  Avg Length: {avg_dur//60}m {avg_dur%60}s")
 
-    durations = [v["duration_sec"] for v in video_data if v["duration_sec"] > 0]
-    avg_duration = sum(durations) // len(durations) if durations else 0
+    breakouts = [v for v in vdata if v["views"] >= avg_v * 3]
+    print(f"  Breakouts (3x+ avg): {len(breakouts)}/{len(vdata)} ({len(breakouts)*100//len(vdata)}%)")
 
-    print(f"\nView Stats (last {len(video_data)} videos):")
-    print(f"  Average:  {format_number(avg_views)}")
-    print(f"  Median:   {format_number(median_views)}")
-    print(f"  Max:      {format_number(max_views)}")
-    print(f"  Min:      {format_number(min_views)}")
-    print(f"  Avg Duration: {avg_duration // 60}m {avg_duration % 60}s")
-
-    # Breakout ratio
-    breakout_threshold = avg_views * 3
-    breakouts = [v for v in video_data if v["views"] >= breakout_threshold]
-    print(f"\n  Breakout Videos (3x+ avg): {len(breakouts)} / {len(video_data)} ({len(breakouts)*100//len(video_data)}%)")
-
-    # Upload frequency
-    dates = sorted([v["published"] for v in video_data])
+    dates = sorted(v["published"] for v in vdata)
     if len(dates) >= 2:
-        first = datetime.strptime(dates[0], "%Y-%m-%d")
-        last = datetime.strptime(dates[-1], "%Y-%m-%d")
-        span_days = max((last - first).days, 1)
-        vids_per_week = len(video_data) / (span_days / 7)
-        print(f"  Upload Frequency: {vids_per_week:.1f} videos/week")
+        d0 = datetime.strptime(dates[0], "%Y-%m-%d")
+        d1 = datetime.strptime(dates[-1], "%Y-%m-%d")
+        span = max((d1 - d0).days, 1)
+        freq = len(vdata) / (span / 7)
+        print(f"  Upload Freq: {freq:.1f} vids/week")
 
-    # Top 10 videos
     print(f"\nTOP 10 VIDEOS:")
     print(f"{'Views':>10}  {'Likes':>8}  {'Dur':>6}  {'Date':>12}  Title")
     print("-" * 100)
-    for v in video_data[:10]:
-        dur_str = f"{v['duration_sec']//60}:{v['duration_sec']%60:02d}"
-        title = v["title"][:55]
-        print(f"{format_number(v['views']):>10}  {format_number(v['likes']):>8}  {dur_str:>6}  {v['published']:>12}  {title}")
+    for v in vdata[:10]:
+        d = f"{v['duration']//60}:{v['duration']%60:02d}"
+        print(f"{fmt(v['views']):>10}  {fmt(v['likes']):>8}  {d:>6}  {v['published']:>12}  {v['title'][:55]}")
 
-    # Bottom 5 videos
     print(f"\nBOTTOM 5 VIDEOS:")
-    for v in video_data[-5:]:
-        dur_str = f"{v['duration_sec']//60}:{v['duration_sec']%60:02d}"
-        title = v["title"][:55]
-        print(f"{format_number(v['views']):>10}  {format_number(v['likes']):>8}  {dur_str:>6}  {v['published']:>12}  {title}")
+    for v in vdata[-5:]:
+        d = f"{v['duration']//60}:{v['duration']%60:02d}"
+        print(f"{fmt(v['views']):>10}  {fmt(v['likes']):>8}  {d:>6}  {v['published']:>12}  {v['title'][:55]}")
 
     # Title analysis
+    wc = [len(v["title"].split()) for v in vdata]
+    caps = sum(1 for v in vdata if sum(c.isupper() for c in v["title"]) > len(v["title"])*0.3)
+    qs = sum(1 for v in vdata if "?" in v["title"])
+    nums = sum(1 for v in vdata if any(c.isdigit() for c in v["title"]))
     print(f"\nTITLE PATTERNS:")
-    word_counts = [len(v["title"].split()) for v in video_data]
-    avg_words = sum(word_counts) / len(word_counts)
-    print(f"  Avg Title Length: {avg_words:.1f} words")
-
-    # Check for common patterns
-    caps_titles = sum(1 for v in video_data if sum(1 for c in v["title"] if c.isupper()) > len(v["title"]) * 0.3)
-    question_titles = sum(1 for v in video_data if "?" in v["title"])
-    number_titles = sum(1 for v in video_data if any(c.isdigit() for c in v["title"]))
-
-    print(f"  Heavy CAPS titles: {caps_titles} ({caps_titles*100//len(video_data)}%)")
-    print(f"  Question titles: {question_titles} ({question_titles*100//len(video_data)}%)")
-    print(f"  Titles with numbers: {number_titles} ({number_titles*100//len(video_data)}%)")
-
-    return video_data
-
-
-def export_videos_csv(youtube, channel_identifier, limit=50, output_file=None):
-    """Export channel videos to CSV for Step 1 analysis."""
-    if channel_identifier.startswith("@") or not channel_identifier.startswith("UC"):
-        channel_id = get_channel_id_from_handle(youtube, channel_identifier)
-        if not channel_id:
-            print(f"ERROR: Could not find channel: {channel_identifier}")
-            return
-    else:
-        channel_id = channel_identifier
-
-    channel = get_channel_stats(youtube, channel_id)
-    if not channel:
-        print(f"ERROR: Could not fetch channel: {channel_id}")
-        return
-
-    channel_name = channel["snippet"]["title"]
-    videos = get_channel_videos(youtube, channel_id, limit=limit)
-
-    if not output_file:
-        safe_name = "".join(c if c.isalnum() or c in "-_ " else "" for c in channel_name)
-        output_file = f"data/{safe_name.strip().replace(' ', '_')}_videos.csv"
-
-    os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else "data", exist_ok=True)
-
-    with open(output_file, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Video Title", "View Count", "Likes", "Comments", "Duration (sec)", "Published Date", "Video ID"])
-        for v in videos:
-            vstats = v.get("statistics", {})
-            duration = parse_duration(v["contentDetails"].get("duration", "PT0S"))
-            writer.writerow([
-                v["snippet"]["title"],
-                vstats.get("viewCount", 0),
-                vstats.get("likeCount", 0),
-                vstats.get("commentCount", 0),
-                duration,
-                v["snippet"]["publishedAt"][:10],
-                v["id"]
-            ])
-
-    print(f"Exported {len(videos)} videos to: {output_file}")
-    print(f"Channel: {channel_name}")
-    print(f"\nThis CSV can be used directly with the Step 1 Channel Analysis Prompt.")
-    return output_file
-
-
-def compare_niches(youtube, queries):
-    """Compare multiple niche searches side by side."""
-    print("=" * 90)
-    print("NICHE COMPARISON")
-    print("=" * 90)
-
-    results = []
-
-    for query in queries:
-        print(f"\nSearching: '{query}'...")
-        channels = search_channels(youtube, query, max_results=10)
-
-        if not channels:
-            print(f"  No channels found for '{query}'")
-            results.append({"query": query, "channels": 0})
-            continue
-
-        subs = []
-        views = []
-        video_counts = []
-
-        for ch in channels:
-            s = ch.get("statistics", {})
-            sub_count = int(s.get("subscriberCount", 0))
-            view_count = int(s.get("viewCount", 0))
-            vid_count = int(s.get("videoCount", 0))
-            if sub_count > 0:
-                subs.append(sub_count)
-            if view_count > 0:
-                views.append(view_count)
-            if vid_count > 0:
-                video_counts.append(vid_count)
-
-        avg_subs = sum(subs) // len(subs) if subs else 0
-        avg_views = sum(views) // len(views) if views else 0
-        median_subs = sorted(subs)[len(subs) // 2] if subs else 0
-        total_channels = len(channels)
-
-        # Check for small channels (opportunity signal)
-        small_channels = sum(1 for s in subs if s < 100_000)
-        big_channels = sum(1 for s in subs if s >= 1_000_000)
-
-        avg_vids = sum(video_counts) // len(video_counts) if video_counts else 0
-        avg_views_per_vid = avg_views // avg_vids if avg_vids > 0 else 0
-
-        result = {
-            "query": query,
-            "channels": total_channels,
-            "avg_subs": avg_subs,
-            "median_subs": median_subs,
-            "avg_views": avg_views,
-            "avg_views_per_vid": avg_views_per_vid,
-            "small_channels": small_channels,
-            "big_channels": big_channels,
-            "top_channel": max(channels, key=lambda c: int(c.get("statistics", {}).get("subscriberCount", 0))),
-        }
-        results.append(result)
-
-        # Print top channels for this niche
-        sorted_channels = sorted(channels, key=lambda c: int(c.get("statistics", {}).get("subscriberCount", 0)), reverse=True)
-        print(f"\n  Top channels for '{query}':")
-        for ch in sorted_channels[:5]:
-            s = ch.get("statistics", {})
-            name = ch["snippet"]["title"]
-            print(f"    {name:40s}  Subs: {format_number(s.get('subscriberCount')):>8}  Views: {format_number(s.get('viewCount')):>8}  Videos: {s.get('videoCount', 'N/A'):>6}")
-
-    # Summary comparison table
-    print("\n" + "=" * 90)
-    print("COMPARISON SUMMARY")
-    print("=" * 90)
-    print(f"{'Niche':<35} {'Channels':>8} {'Avg Subs':>10} {'Med Subs':>10} {'Avg Views':>10} {'Views/Vid':>10} {'<100K':>6} {'>1M':>5}")
-    print("-" * 90)
-
-    for r in results:
-        if "avg_subs" in r:
-            print(f"{r['query']:<35} {r['channels']:>8} {format_number(r['avg_subs']):>10} {format_number(r['median_subs']):>10} {format_number(r['avg_views']):>10} {format_number(r['avg_views_per_vid']):>10} {r['small_channels']:>6} {r['big_channels']:>5}")
-
-    # Opportunity analysis
-    print("\n" + "=" * 90)
-    print("OPPORTUNITY SIGNALS")
-    print("=" * 90)
-    for r in results:
-        if "avg_subs" not in r:
-            continue
-        signals = []
-        if r["small_channels"] >= 7:
-            signals.append("HIGH opportunity — mostly small channels, room to grow")
-        elif r["small_channels"] >= 4:
-            signals.append("MODERATE opportunity — mix of established and growing channels")
-        else:
-            signals.append("COMPETITIVE — dominated by large established channels")
-
-        if r["avg_views_per_vid"] > 500_000:
-            signals.append("HIGH view potential per video")
-        elif r["avg_views_per_vid"] > 100_000:
-            signals.append("GOOD view potential per video")
-
-        print(f"\n  {r['query']}:")
-        for s in signals:
-            print(f"    → {s}")
-
-
-def cmd_search(args):
-    youtube = build_youtube(get_api_key())
-    channels = search_channels(youtube, args.query, max_results=args.limit)
-
-    print(f"\nSearch results for: '{args.query}'")
-    print(f"{'Channel':<40} {'Subs':>10} {'Views':>10} {'Videos':>8}")
-    print("-" * 70)
-
-    sorted_channels = sorted(channels, key=lambda c: int(c.get("statistics", {}).get("subscriberCount", 0)), reverse=True)
-    for ch in sorted_channels:
-        s = ch.get("statistics", {})
-        print(f"{ch['snippet']['title']:<40} {format_number(s.get('subscriberCount')):>10} {format_number(s.get('viewCount')):>10} {s.get('videoCount', 'N/A'):>8}")
-
-
-def cmd_channel(args):
-    youtube = build_youtube(get_api_key())
-    analyze_channel(youtube, args.channel)
+    print(f"  Avg Length:    {sum(wc)/len(wc):.1f} words")
+    print(f"  Heavy CAPS:   {caps} ({caps*100//len(vdata)}%)")
+    print(f"  Questions:    {qs} ({qs*100//len(vdata)}%)")
+    print(f"  With Numbers: {nums} ({nums*100//len(vdata)}%)")
 
 
 def cmd_videos(args):
-    youtube = build_youtube(get_api_key())
-    export_videos_csv(youtube, args.channel, limit=args.limit, output_file=args.output)
+    cid = args.channel
+    if cid.startswith("@") or not cid.startswith("UC"):
+        cid = resolve_handle(cid)
+        if not cid:
+            print(f"ERROR: Channel not found: {args.channel}")
+            return
+
+    ch = get_channel(cid)
+    if not ch: return
+    name = ch["snippet"]["title"]
+    videos = get_videos(cid, limit=args.limit)
+
+    os.makedirs("data", exist_ok=True)
+    safe = re.sub(r'[^\w\s-]', '', name).strip().replace(' ', '_')
+    out = args.output or f"data/{safe}_videos.csv"
+
+    with open(out, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Video Title", "View Count", "Likes", "Comments", "Duration (sec)", "Published Date", "Video ID"])
+        for v in videos:
+            vs = v.get("statistics", {})
+            w.writerow([
+                v["snippet"]["title"],
+                vs.get("viewCount", 0), vs.get("likeCount", 0), vs.get("commentCount", 0),
+                parse_duration(v["contentDetails"].get("duration", "")),
+                v["snippet"]["publishedAt"][:10], v["id"]
+            ])
+
+    print(f"Exported {len(videos)} videos to: {out}")
+    print(f"Channel: {name}")
+    print(f"\nUse this CSV with the Step 1 Channel Analysis Prompt.")
 
 
 def cmd_compare(args):
-    youtube = build_youtube(get_api_key())
-    compare_niches(youtube, args.niches)
+    print("=" * 90)
+    print("NICHE COMPARISON — Real YouTube Data")
+    print("=" * 90)
+
+    results = []
+    for q in args.niches:
+        print(f"\nSearching: '{q}'...")
+        channels = search_channels(q, max_results=10)
+        if not channels:
+            print(f"  No channels found.")
+            results.append({"query": q})
+            continue
+
+        subs = [int(c["statistics"].get("subscriberCount", 0)) for c in channels if int(c["statistics"].get("subscriberCount", 0)) > 0]
+        views = [int(c["statistics"].get("viewCount", 0)) for c in channels if int(c["statistics"].get("viewCount", 0)) > 0]
+        vids = [int(c["statistics"].get("videoCount", 0)) for c in channels if int(c["statistics"].get("videoCount", 0)) > 0]
+
+        avg_subs = sum(subs)//len(subs) if subs else 0
+        med_subs = sorted(subs)[len(subs)//2] if subs else 0
+        avg_views = sum(views)//len(views) if views else 0
+        avg_vids = sum(vids)//len(vids) if vids else 0
+        avg_vpv = avg_views // avg_vids if avg_vids else 0
+
+        small = sum(1 for s in subs if s < 100_000)
+        big = sum(1 for s in subs if s >= 1_000_000)
+
+        r = {"query": q, "n": len(channels), "avg_subs": avg_subs, "med_subs": med_subs,
+             "avg_views": avg_views, "avg_vpv": avg_vpv, "small": small, "big": big}
+        results.append(r)
+
+        top = sorted(channels, key=lambda c: int(c["statistics"].get("subscriberCount", 0)), reverse=True)
+        for ch in top[:5]:
+            s = ch["statistics"]
+            print(f"    {ch['snippet']['title'][:42]:<44} Subs:{fmt(s.get('subscriberCount')):>8}  Views:{fmt(s.get('viewCount')):>10}  Vids:{s.get('videoCount','?'):>6}")
+
+    print(f"\n{'='*90}")
+    print("SUMMARY")
+    print(f"{'='*90}")
+    print(f"{'Niche':<32} {'#Ch':>4} {'Avg Subs':>10} {'Med Subs':>10} {'Avg Views':>12} {'Views/Vid':>10} {'<100K':>6} {'>1M':>5}")
+    print("-" * 90)
+    for r in results:
+        if "avg_subs" not in r: continue
+        print(f"{r['query'][:31]:<32} {r['n']:>4} {fmt(r['avg_subs']):>10} {fmt(r['med_subs']):>10} {fmt(r['avg_views']):>12} {fmt(r['avg_vpv']):>10} {r['small']:>6} {r['big']:>5}")
+
+    print(f"\n{'='*90}")
+    print("OPPORTUNITY SIGNALS")
+    print(f"{'='*90}")
+    for r in results:
+        if "avg_subs" not in r: continue
+        print(f"\n  {r['query']}:")
+        if r["small"] >= 7:
+            print(f"    → HIGH opportunity — {r['small']}/{r['n']} channels under 100K subs")
+        elif r["small"] >= 4:
+            print(f"    → MODERATE opportunity — mix of small and established")
+        else:
+            print(f"    → COMPETITIVE — dominated by large channels ({r['big']} with 1M+)")
+        if r["avg_vpv"] > 500_000:
+            print(f"    → HIGH view potential: {fmt(r['avg_vpv'])} avg views/video")
+        elif r["avg_vpv"] > 100_000:
+            print(f"    → GOOD view potential: {fmt(r['avg_vpv'])} avg views/video")
+        elif r["avg_vpv"] > 10_000:
+            print(f"    → MODERATE view potential: {fmt(r['avg_vpv'])} avg views/video")
+        else:
+            print(f"    → LOW view potential: {fmt(r['avg_vpv'])} avg views/video")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="YouTube Niche Scraper — Pull real data for channel analysis",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
-    )
-    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+    p = argparse.ArgumentParser(description="YouTube Niche Scraper")
+    sp = p.add_subparsers(dest="cmd")
 
-    # Search command
-    p_search = subparsers.add_parser("search", help="Search for channels in a niche")
-    p_search.add_argument("query", help="Search query (e.g., 'court case documentary')")
-    p_search.add_argument("--limit", type=int, default=15, help="Max results (default: 15)")
-    p_search.set_defaults(func=cmd_search)
+    s1 = sp.add_parser("search")
+    s1.add_argument("query")
+    s1.add_argument("--limit", type=int, default=15)
 
-    # Channel command
-    p_channel = subparsers.add_parser("channel", help="Analyze a specific channel")
-    p_channel.add_argument("channel", help="Channel handle (@name) or ID (UCxxx)")
-    p_channel.set_defaults(func=cmd_channel)
+    s2 = sp.add_parser("channel")
+    s2.add_argument("channel")
 
-    # Videos command
-    p_videos = subparsers.add_parser("videos", help="Export channel videos to CSV")
-    p_videos.add_argument("channel", help="Channel handle (@name) or ID (UCxxx)")
-    p_videos.add_argument("--limit", type=int, default=50, help="Number of videos (default: 50)")
-    p_videos.add_argument("--output", help="Output CSV file path")
-    p_videos.set_defaults(func=cmd_videos)
+    s3 = sp.add_parser("videos")
+    s3.add_argument("channel")
+    s3.add_argument("--limit", type=int, default=50)
+    s3.add_argument("--output")
 
-    # Compare command
-    p_compare = subparsers.add_parser("compare", help="Compare multiple niches")
-    p_compare.add_argument("niches", nargs="+", help="Niche search queries to compare")
-    p_compare.set_defaults(func=cmd_compare)
+    s4 = sp.add_parser("compare")
+    s4.add_argument("niches", nargs="+")
 
-    args = parser.parse_args()
-    if not args.command:
-        parser.print_help()
+    args = p.parse_args()
+    if not args.cmd:
+        p.print_help()
         sys.exit(1)
 
-    args.func(args)
+    {"search": cmd_search, "channel": cmd_channel, "videos": cmd_videos, "compare": cmd_compare}[args.cmd](args)
 
 
 if __name__ == "__main__":
