@@ -32,12 +32,15 @@ Every step connects. The output of each phase becomes the input for the next —
 │   ├── step4-script-blueprint.md      # How to build the script blueprint
 │   ├── step5-video-outline.md         # How to generate video outlines
 │   └── step6-production-handoff.md    # How to delegate to freelancers
+├── scripts/
+│   └── youtube_scraper.py             # YouTube API scraper for real channel data
 ├── templates/
 │   ├── channel-config.yaml            # Channel configuration template
 │   ├── video-tracker.csv              # Production tracking spreadsheet
 │   └── upwork-job-posts.md            # Freelancer job post templates
 └── docs/
-    └── system-overview.md             # Full system documentation
+    ├── system-overview.md             # Full system documentation
+    └── niche-opportunities.md         # Niche analysis with real data
 ```
 
 ## Requirements
