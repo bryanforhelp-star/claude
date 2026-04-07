@@ -1,0 +1,38 @@
+# YouTube Channel Configuration
+# Fill in these values before running the prompts
+
+channel:
+  name: ""                          # Your channel name
+  niche: ""                         # e.g., "true crime", "personal finance", "tech reviews"
+  niche_description: ""             # Detailed niche description for prompts
+  channel_format: ""                # e.g., "Faceless narration", "Top 10 listicle"
+  audience_description: ""          # Who watches this content
+
+competitor:
+  channel_name: ""                  # Competitor channel you're analyzing
+  channel_url: ""                   # URL to their YouTube channel
+  approximate_video_count: 0        # How many videos they have
+
+# Performance tier thresholds (customize based on competitor data)
+performance_tiers:
+  breakout_threshold: 1000000       # Views for "breakout hit" status
+  strong_low: 500000                # Strong performer lower bound
+  strong_high: 999999               # Strong performer upper bound
+  mid_low: 100000                   # Mid-tier lower bound
+  mid_high: 499999                  # Mid-tier upper bound
+  under_low: 10000                  # Underperformer lower bound
+  under_high: 99999                 # Underperformer upper bound
+  dead_threshold: 10000             # Below this = dead
+
+# Title generation settings
+title_generation:
+  target_views: 500000              # Minimum view target for generated titles
+  title_length_min: 10              # Minimum words per title
+  title_length_max: 15              # Maximum words per title
+  caps_budget: 1                    # Max CAPS words per title
+
+# Channel quirks / known behaviors
+channel_quirks: ""                  # Any unique patterns you've noticed
+
+# File types for data input
+file_type: "CSV"                    # CSV, PDF, or spreadsheet format
