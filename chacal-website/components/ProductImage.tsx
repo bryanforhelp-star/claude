@@ -5,71 +5,82 @@ type Props = {
   className?: string
 }
 
-const categoryColors = {
-  tees: { bg: '#0f0a0a', accent: '#8b1a1a' },
-  hats: { bg: '#0a0a0f', accent: '#1a1a6b' },
-}
-
 export default function ProductImage({ product, className = '' }: Props) {
-  const colors = categoryColors[product.category]
-
   return (
     <div
-      className={`relative overflow-hidden flex items-center justify-center ${className}`}
-      style={{ background: `linear-gradient(145deg, ${colors.bg} 0%, #111 50%, ${colors.bg} 100%)` }}
+      className={`relative overflow-hidden flex items-end justify-center ${className}`}
+      style={{ background: '#0d0d0d' }}
     >
-      {/* Flame glow at bottom */}
+      {/* Subtle red glow from below */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-1/3"
+        className="absolute inset-0"
         style={{
-          background: `linear-gradient(to top, ${colors.accent}40, transparent)`,
+          background:
+            'radial-gradient(ellipse 70% 35% at 50% 100%, #8b1a1a28 0%, transparent 65%)',
         }}
       />
 
+      {/* Flame-shaped light lines */}
+      <svg
+        viewBox="0 0 200 300"
+        className="absolute bottom-0 left-0 right-0 w-full opacity-10"
+        preserveAspectRatio="none"
+        style={{ height: '55%' }}
+        aria-hidden="true"
+      >
+        <path
+          d="M 60 300 C 55 260 65 220 58 180 C 52 145 60 110 55 80 C 53 68 65 62 68 76 C 74 105 68 150 72 195 C 78 240 75 278 75 300 Z"
+          fill="#8b1a1a"
+        />
+        <path
+          d="M 100 300 C 94 250 105 200 100 155 C 96 118 100 80 95 52 C 93 40 107 36 110 50 C 117 78 114 125 118 175 C 124 225 120 270 120 300 Z"
+          fill="#8b1a1a"
+        />
+        <path
+          d="M 140 300 C 135 265 148 230 144 195 C 141 165 146 130 140 105 C 138 94 150 88 153 100 C 159 125 156 165 159 200 C 163 235 160 270 160 300 Z"
+          fill="#8b1a1a"
+        />
+      </svg>
+
       {/* Center content */}
-      <div className="relative z-10 text-center px-4 select-none">
+      <div className="relative z-10 w-full text-center pb-6 pt-10">
         <div
-          className="font-gothic text-4xl md:text-5xl mb-1"
           style={{
-            color: '#e8d5b0',
-            textShadow: `0 0 30px ${colors.accent}, 0 0 60px ${colors.accent}60`,
             fontFamily: '"UnifrakturMaguntia", serif',
+            fontSize: 'clamp(2.5rem, 8vw, 4rem)',
+            color: '#e8d5b0',
+            lineHeight: 1,
+            textShadow: '0 0 30px #8b1a1a60',
           }}
         >
           Chacal
         </div>
-        <div className="text-xs tracking-[0.3em] uppercase" style={{ color: '#8b6a3a' }}>
+        <div
+          style={{
+            fontFamily: 'Oswald, sans-serif',
+            fontSize: '0.6rem',
+            letterSpacing: '0.35em',
+            textTransform: 'uppercase',
+            color: '#3a2a1a',
+            marginTop: '0.4rem',
+          }}
+        >
           {product.category === 'tees' ? 'Old School Tee' : 'Old School Hat'}
         </div>
-
-        {/* Wolf silhouette placeholder */}
-        <div className="mt-3 flex justify-center">
-          <svg viewBox="0 0 60 60" className="w-12 h-12 opacity-30" fill={colors.accent}>
-            <path d="M30 5 C22 5 15 10 12 18 C8 16 4 18 4 22 C4 26 8 28 12 26 C11 30 12 35 15 39 C17 42 20 44 24 45 L24 52 L28 52 L28 48 L32 48 L32 52 L36 52 L36 45 C40 44 43 42 45 39 C48 35 49 30 48 26 C52 28 56 26 56 22 C56 18 52 16 48 18 C45 10 38 5 30 5Z" />
-          </svg>
-        </div>
-      </div>
-
-      {/* Top-left decorative text */}
-      <div
-        className="absolute top-3 left-3 text-[9px] tracking-[0.2em] uppercase opacity-40"
-        style={{ color: colors.accent }}
-      >
-        MMXXIV
-      </div>
-
-      {/* Bottom-right decorative */}
-      <div
-        className="absolute bottom-3 right-3 text-[9px] tracking-[0.15em] uppercase opacity-40"
-        style={{ color: '#8b6a3a' }}
-      >
-        EST.
       </div>
 
       {product.badge && (
         <div
-          className="absolute top-3 right-3 text-[9px] tracking-[0.2em] font-bold px-2 py-1"
-          style={{ background: colors.accent, color: '#e8d5b0' }}
+          className="absolute top-3 right-3"
+          style={{
+            fontFamily: 'Oswald, sans-serif',
+            fontSize: '0.6rem',
+            letterSpacing: '0.25em',
+            textTransform: 'uppercase',
+            padding: '0.3rem 0.6rem',
+            background: '#8b1a1a',
+            color: '#e8d5b0',
+          }}
         >
           {product.badge}
         </div>

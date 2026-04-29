@@ -10,29 +10,44 @@ export default function Navbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 border-b"
-      style={{ background: 'rgba(10,10,10,0.95)', borderColor: '#2a2a2a', backdropFilter: 'blur(8px)' }}
+      className="fixed top-0 left-0 right-0 z-50"
+      style={{
+        background: 'rgba(10,10,10,0.96)',
+        borderBottom: '1px solid #1a1a1a',
+        backdropFilter: 'blur(8px)',
+      }}
     >
-      <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-16">
+      <div
+        style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          padding: '0 1.5rem',
+          height: '60px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         {/* Logo */}
-        <Link href="/" className="flex flex-col leading-none">
+        <Link href="/" style={{ textDecoration: 'none', lineHeight: 1 }}>
           <span
-            className="text-2xl"
             style={{
               fontFamily: '"UnifrakturMaguntia", serif',
+              fontSize: '1.75rem',
               color: '#e8d5b0',
-              textShadow: '0 0 15px #8b1a1a80',
+              display: 'block',
+              lineHeight: 1,
             }}
           >
             Chacal
           </span>
-          <span className="text-[8px] tracking-[0.35em] uppercase" style={{ color: '#8b6a3a' }}>
-            Old School
-          </span>
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-8">
+        <div
+          className="hidden md:flex"
+          style={{ alignItems: 'center', gap: '2.5rem' }}
+        >
           {[
             { href: '/shop', label: 'Shop' },
             { href: '/shop?cat=tees', label: 'Tees' },
@@ -41,24 +56,24 @@ export default function Navbar() {
             <Link
               key={href}
               href={href}
-              className="text-xs tracking-[0.25em] uppercase transition-colors hover:text-chacal-cream"
-              style={{ color: '#a89070' }}
+              style={{
+                fontFamily: 'Oswald, sans-serif',
+                fontSize: '0.8rem',
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                color: '#6a5a4a',
+                textDecoration: 'none',
+              }}
             >
               {label}
             </Link>
           ))}
         </div>
 
-        {/* Right side */}
-        <div className="flex items-center gap-4">
-          <Link href="/cart" className="relative group">
-            <svg
-              className="w-5 h-5 transition-colors"
-              style={{ color: '#a89070' }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+        {/* Cart + mobile toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <Link href="/cart" style={{ position: 'relative', color: '#6a5a4a' }}>
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -68,21 +83,34 @@ export default function Navbar() {
             </svg>
             {itemCount > 0 && (
               <span
-                className="absolute -top-2 -right-2 text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center"
-                style={{ background: '#8b1a1a', color: '#e8d5b0' }}
+                style={{
+                  position: 'absolute',
+                  top: '-7px',
+                  right: '-7px',
+                  width: '16px',
+                  height: '16px',
+                  background: '#8b1a1a',
+                  color: '#e8d5b0',
+                  fontSize: '9px',
+                  fontFamily: 'Oswald, sans-serif',
+                  fontWeight: 600,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
                 {itemCount}
               </span>
             )}
           </Link>
 
-          {/* Mobile menu toggle */}
           <button
             className="md:hidden"
             onClick={() => setMenuOpen(!menuOpen)}
-            style={{ color: '#a89070' }}
+            style={{ color: '#6a5a4a', background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {menuOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
               ) : (
@@ -96,21 +124,32 @@ export default function Navbar() {
       {/* Mobile menu */}
       {menuOpen && (
         <div
-          className="md:hidden border-t px-4 py-4 flex flex-col gap-4"
-          style={{ borderColor: '#2a2a2a', background: '#0a0a0a' }}
+          style={{
+            borderTop: '1px solid #1a1a1a',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.25rem',
+            background: '#0a0a0a',
+          }}
         >
           {[
             { href: '/shop', label: 'Shop All' },
             { href: '/shop?cat=tees', label: 'Tees' },
             { href: '/shop?cat=hats', label: 'Hats' },
-            { href: '/cart', label: `Cart (${itemCount})` },
           ].map(({ href, label }) => (
             <Link
               key={href}
               href={href}
               onClick={() => setMenuOpen(false)}
-              className="text-sm tracking-[0.2em] uppercase"
-              style={{ color: '#a89070' }}
+              style={{
+                fontFamily: 'Oswald, sans-serif',
+                fontSize: '0.85rem',
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: '#6a5a4a',
+                textDecoration: 'none',
+              }}
             >
               {label}
             </Link>
