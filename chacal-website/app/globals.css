@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Oswald:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-gothic: 'UnifrakturMaguntia';
+  --font-heading: 'Oswald';
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #0a0a0a;
+  color: #e8d5b0;
+  font-family: 'Oswald', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #8b1a1a;
+  color: #e8d5b0;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8b1a1a;
+}
+
+@layer utilities {
+  .text-gothic {
+    font-family: 'UnifrakturMaguntia', serif;
+  }
+  .flame-text {
+    text-shadow: 0 0 20px #8b1a1a, 0 0 40px #8b1a1a60, 0 0 80px #8b1a1a30;
+  }
+  .gold-text {
+    text-shadow: 0 0 20px #c4922a80;
+  }
+}
