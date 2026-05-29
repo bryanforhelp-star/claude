@@ -51,6 +51,15 @@ These channels use the EXACT 6-step system we're implementing:
 - **Production:** 100% AI — no editor, ~25 min per video
 - **Why it worked:** Cats are evergreen + AI production = near-zero cost
 
+### AI Fruit Drama — Short-Form Brainrot
+- **Result:** Multiple accounts confirmed $10K+/month (May 2026 data)
+- **Niche:** Anthropomorphic fruit/vegetable drama — betrayal, revenge, crying, conflict
+- **Production:** 100% AI — Claude (story) → Nano Banana/Midjourney (images) → Kling AI (animation) → CapCut (edit)
+- **Time per video:** 25–45 minutes
+- **Production cost:** ~$50–80/month in tool subscriptions (no per-video cost)
+- **Why it works:** Absurdist format + universal emotional triggers + short-form algorithm boost + zero production overhead
+- **Full playbook:** See [`docs/fruit-drama-niche.md`](fruit-drama-niche.md)
+
 ### Fern — Crime Documentaries (Benchmark Channel)
 - **Subscribers:** 4.8M
 - **Total views:** 483.9M across only 117 videos
@@ -82,6 +91,7 @@ These channels use the EXACT 6-step system we're implementing:
 | **3** | **AI Tools & Tutorials** | 88.6K avg | $8-22 | Moderate | No direct case study | ~$50-65/video | Good | **8/10** |
 | **4** | **Crime Documentaries** | 149-164K avg | $8-18 | High | Fern = $55K/mo (benchmark) | ~$75-100/video | Good | **7/10** |
 | **5** | **Pet Content (AI-generated)** | High (2.4M in first month) | $4-8 | Moderate | **YES — $7-10K/mo** | ~$10-25/video (AI) | Partial | **7/10** |
+| **5b** | **AI Fruit Drama (Short-Form)** | Viral (format exploding in 2026) | $0.40-0.80/1K (TikTok) | Low-Medium | **YES — $10K+/mo confirmed** | ~$0/video (subscription only) | **Perfect** | **8/10** |
 | 6 | English Learning | High | $10-18 | High | No | ~$40-65/video | Weaker | 5/10 |
 | 7 | Betrayal/Revenge | **11K avg** | $12+ claimed | Low | No | ~$60-80/video | Good | 4/10 |
 | 8 | Stoicism/Philosophy | **11K avg** | $5-9 | Low | No | ~$40-60/video | OK | 3/10 |

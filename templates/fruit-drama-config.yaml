@@ -1,0 +1,92 @@
+# Fruit Drama Channel Configuration
+# Fill in before running any prompts
+
+channel:
+  name: ""                        # e.g. "Fruitville Drama"
+  universe_name: ""               # e.g. "Fruitville" — the fictional world your characters live in
+  platform_primary: "tiktok"      # tiktok | youtube | instagram
+  post_frequency: 3               # Videos per day target
+
+characters:
+  lead:
+    name: ""                      # e.g. "Barry the Banana"
+    fruit_type: ""                # e.g. "banana"
+    personality: ""               # e.g. "dramatic, quick to cry, wears a gold chain"
+    voice_profile: ""             # ElevenLabs voice ID or description
+
+  love_interest:
+    name: ""                      # e.g. "Strawberry Shantelle"
+    fruit_type: ""                # e.g. "strawberry"
+    personality: ""               # e.g. "secretive, charming, always has an excuse"
+    voice_profile: ""
+
+  best_friend:
+    name: ""                      # e.g. "Broccoli Brad"
+    fruit_type: ""                # e.g. "broccoli"
+    personality: ""               # e.g. "nervous, knows too much, terrible liar"
+    voice_profile: ""
+
+  rival:
+    name: ""                      # e.g. "Apple Austin"
+    fruit_type: ""                # e.g. "apple"
+    personality: ""               # e.g. "cold, wealthy, superior attitude"
+    voice_profile: ""
+
+  wildcard:
+    name: ""                      # e.g. "Tomato Teresa"
+    fruit_type: ""                # e.g. "tomato"
+    personality: ""               # e.g. "chaotic, loud, always starts drama"
+    voice_profile: ""
+
+production:
+  image_tool: "nano_banana"       # nano_banana | midjourney | dalle3
+  video_tool: "kling_3"           # kling_3 | runway | pika
+  editing_tool: "capcut"          # capcut | premiere | davinci
+  voice_tool: ""                  # elevenlabs | characterai | none
+
+style:
+  caption_style: "aggressive"     # aggressive | minimal | subtitle
+  caption_font: "bold_sans"       # bold_sans | impact | custom
+  caption_color: "yellow_white"   # yellow_white | white | custom
+  default_camera: "static_zoom"   # static_zoom | static | push_in
+  default_mood: "chaotic"         # chaotic | dramatic | absurd | emotional
+
+# Emotional formula rotation — order determines the weekly posting cycle
+formula_rotation:
+  - betrayal
+  - conflict
+  - revenge
+  - absurd_twist
+  - cliffhanger
+
+# Audio defaults
+audio:
+  default_music: "sad_piano"      # sad_piano | dramatic_string | trending_tiktok | emotional_pop
+  sfx_pack: "tiktok_drama"        # tiktok_drama | cinematic | minimal
+  dialogue_volume: 80             # percent (0–100)
+  music_volume: 25                # percent (0–100)
+
+# Platform posting settings
+posting:
+  tiktok:
+    best_time: "18:00-22:00 EST"
+    hashtag_count: 8
+    caption_length: "short"       # short | medium
+  instagram_reels:
+    best_time: "18:00-21:00 EST"
+    hashtag_count: 12
+    caption_length: "short"
+  youtube_shorts:
+    best_time: "any"
+    hashtag_count: 4
+    caption_length: "medium"
+
+# Monetization targets
+monetization:
+  brand_deal_threshold: 50000     # Follower count to start outreach
+  merch_threshold: 100000
+  tiktok_series_threshold: 500000
+  licensing_threshold: 1000000
+
+# Tracker file
+tracker_file: "templates/fruit-drama-tracker.csv"
